@@ -1,0 +1,8 @@
+__pycache__/
+.pytest_cache/
+.remember/
+# local configuration: drive paths and project names
+libraries.json
+# scratch files from earlier test runs
+baseline_before.txt
+sports_watch_baseline.txt
