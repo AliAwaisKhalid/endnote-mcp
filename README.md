@@ -11,7 +11,7 @@ For EndNote 2025 libraries on Windows. The server only reads copies of your libr
 3. Register the server with Claude Code, using the path to your clone:
 
    ```
-   claude mcp add endnote --scope user -- python C:/path/to/endnote-mcp-readonly/server.py
+   claude mcp add endnote --scope user -- python C:/path/to/endnote-mcp/server.py
    ```
 
 4. Start a new Claude Code session and run `claude mcp list`; `endnote` should show Connected. Ask Claude to run `list_libraries`.
