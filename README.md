@@ -2,6 +2,24 @@
 
 Reads EndNote 2025 libraries through a snapshot copy. It never writes to a library, a `.Data` folder or an attachment. 27 tools. Schema notes: `SCHEMA.md`. Tests: `test_mcp_client.py` (live, over MCP) and the pytest files listed under Tests.
 
+## Quick start for the group
+
+For EndNote 2025 libraries on Windows. The server only reads copies of your libraries and never changes them.
+
+1. Clone the repository and install the packages: `pip install -r requirements.txt`. Python 3.11 or newer. Install `pandoc` too if you want `get_bibliography`.
+2. Copy `libraries.example.json` to `libraries.json` and put your own `.enl` paths in it (forward slashes). `libraries.json` stays on your machine and is not committed.
+3. Register the server with Claude Code, using the path to your clone:
+
+   ```
+   claude mcp add endnote --scope user -- python C:/path/to/endnote-mcp-readonly/server.py
+   ```
+
+4. Start a new Claude Code session and run `claude mcp list`; `endnote` should show Connected. Ask Claude to run `list_libraries`.
+5. Check the install: `python -m pytest`. Tests that need a particular library skip on your machine. `test_mcp_client.py` is the author's live test against the author's own libraries and will not run as is.
+6. Optional: the online tools send DOIs and search words to Crossref and OpenAlex. Set `ENDNOTE_MCP_OFFLINE=1` to switch them off.
+
+Report problems as issues in the repository, with the tool name, the arguments (without private titles if you prefer) and the message you saw.
+
 ## Setup
 
 1. Install the packages the server needs: `mcp`, `PyMuPDF` (`fitz`), and `pandoc` on the PATH for `get_bibliography`.

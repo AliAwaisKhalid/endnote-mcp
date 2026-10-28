@@ -1,0 +1,6 @@
+mcp>=1.28
+PyMuPDF>=1.27
+# tests
+pytest>=9
+# only to rebuild the handout (make_handout.py)
+python-docx>=1.2
