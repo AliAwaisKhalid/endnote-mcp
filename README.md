@@ -1,6 +1,6 @@
 # EndNote MCP (read-only)
 
-Reads EndNote 2025 libraries through a snapshot copy. It never writes to a library, a `.Data` folder or an attachment. 27 tools. Schema notes: `SCHEMA.md`. Tests: `test_mcp_client.py` (live, over MCP) and the pytest files listed under Tests.
+Reads EndNote 2025 libraries through a snapshot copy. It never writes to a library, a `.Data` folder or an attachment. 28 tools. Schema notes: `SCHEMA.md`. Tests: `test_mcp_client.py` (live, over MCP) and the pytest files listed under Tests.
 
 ## Quick start for the group
 
@@ -65,7 +65,7 @@ Output: `method_matrix`, `get_bibliography`, `export_items`, `preview_import`
 
 Online: `get_online_record`, `search_online`, `online_citations`, `import_online` (see Online lookups below)
 
-Check: `check_records`, `check_docx_citations`, `missing_pdfs`, `compare_libraries`, `watch_library`
+Check: `check_records`, `check_docx_citations`, `convert_docx_citations`, `missing_pdfs`, `compare_libraries`, `watch_library`
 
 - `watch_library(limit, update_baseline, reset)`: what changed since the last call: records added, updated, moved to the trash, restored, or removed. The first call saves a baseline (record numbers, update times and short titles) in `%LOCALAPPDATA%\endnote-mcp\cache\watch\<library>.json` and reports no changes. Each later call compares the library with the baseline and then moves it forward, so a change is reported once. `update_baseline=False` looks without moving it; `reset=True` starts again from now. It sees changes only after EndNote has saved and the snapshot refreshed; a removed record shows only its number and title. The baseline is the only thing this server writes besides exports, the snapshot copies and the PDF text cache.
 
@@ -77,6 +77,7 @@ Annotations: `get_annotations` (one record), `export_annotations` (several recor
 - `check_records` also flags: no title; a journal article with no journal name; an electronic resource number that is not a valid DOI (journal articles); a DOI shared with another active record; a page range that runs backwards (`54-27`; `1234-56` is read as 1234-1256); a title in all capitals.
 - `check_records(keys or group)`: flags an organisation split across author entries (including a fragment that looks like a name, such as `University of Essex, Institute for Social` followed by `Economic, Research`), a missing year, or no author. Run it on a group before citing it in Word. An entry that ends in a word such as Research, Studies, Institute or Council is read as a complete organisation name and is not flagged, even when a person with a spelled-out first name follows. An organisation whose last word is not in that list, followed by a person, may still be flagged as "may be split"; check it by eye.
 - `check_docx_citations(path, library)`: reads the EndNote fields in a `.docx` without opening Word and compares each citation with the library. Reports a record that is missing or in the trash, an author or year that differs, a citation with no record number, citations from more than one EndNote library, and a document whose records mostly are not in the chosen library. Also reports whether the document has a reference list. Also compares the database id Word stored in the citations with the library's own id (`database_id_matches`: true, false, or null when either id is unknown). A false means the document was written with a different library, and is reported as a problem. A copy made with File > Save a Copy keeps the id, so a match is strong evidence, not proof. Only `.docx`, up to 100 MB.
+- `convert_docx_citations(path, library, output, dry_run)`: turns plain-text author-year citations in a `.docx` into live EndNote fields (`(Smith et al., 2020)`, `(Smith & Lee, 2019; Wu, 2021)`, `Smith et al. (2020)`). A citation is converted only when exactly one active record matches the first author, the year and the number of authors; the rest are listed as `unmatched` or `ambiguous`. Reference-list entries are left alone. The original and the library are never changed: the result goes to a new file (default `<name>_endnote_fields.docx`, never overwriting). Then use EndNote > Update Citations and Bibliography in Word. Needs `lxml`. `dry_run=True` only reports.
 
 - `search_items(query, group, keyword, ref_type, limit, fulltext)`: every word must appear in author, title, year, keywords or abstract. `fulltext=True` also searches EndNote's PDF index and text already read by `get_fulltext`.
 - `find_by_identifier(identifier)`: DOI (doi.org link accepted), key, record number, or title words. Exact matches first, then records containing all the words, then (only if nothing matched) records whose title has each word or a close spelling of it, marked `title words (approximate spelling)`. Words under 4 letters must match exactly. `search_items` stays exact.
