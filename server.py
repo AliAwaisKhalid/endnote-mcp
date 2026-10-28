@@ -496,7 +496,7 @@ def list_libraries() -> list[dict]:
 
 @mcp.tool()
 def search_items(query: str = "", group: str = "", keyword: str = "", ref_type: str = "", limit: int = 25,
-                 fulltext: bool = False, library: str = "") -> list[dict]:
+                 fulltext: bool = False, library: str = "") -> list[dict] | dict:
     """Search active references. Every word in query must appear in author, title, year, keywords or abstract.
     fulltext=True also searches PDF text (EndNote's index and any PDFs already read by get_fulltext).
     Optional filters: group (name), keyword (exact), ref_type (name or code)."""
@@ -550,7 +550,7 @@ def _approximate_title(idx, words):
 
 
 @mcp.tool()
-def find_by_identifier(identifier: str, library: str = "") -> list[dict]:
+def find_by_identifier(identifier: str, library: str = "") -> list[dict] | dict:
     """Find records from one identifier: a DOI (or doi.org link), a key such as Sports:12, a record number,
     or words from the title. Exact matches come first."""
     ident = identifier.strip()
@@ -604,7 +604,7 @@ def get_item(key: str, library: str = "") -> dict:
 
 
 @mcp.tool()
-def get_notes(key: str = "", query: str = "", limit: int = 25, library: str = "") -> list[dict]:
+def get_notes(key: str = "", query: str = "", limit: int = 25, library: str = "") -> list[dict] | dict:
     """Notes and Research Notes. With key: those fields for one record. Without key: records whose notes
     contain every word in query, with a short snippet."""
     if key.strip():
@@ -841,7 +841,7 @@ def get_fulltext(key: str, max_chars: int = 30000, library: str = "") -> dict:
 
 
 @mcp.tool()
-def list_collections(library: str = "") -> list[dict]:
+def list_collections(library: str = "") -> list[dict] | dict:
     """Groups with type and active member count. Smart groups show their cached members, which may be out of date."""
     idx = _index(_pick(library))
     return _wrap(idx, [{"id": g["id"], "name": g["name"], "kind": g["kind"],
@@ -850,7 +850,7 @@ def list_collections(library: str = "") -> list[dict]:
 
 
 @mcp.tool()
-def collection_items(group: str, limit: int = 100, library: str = "") -> list[dict]:
+def collection_items(group: str, limit: int = 100, library: str = "") -> list[dict] | dict:
     """Active members of one group, by name or group id."""
     _limit(limit)
     idx = _index(_pick(library))
@@ -860,7 +860,7 @@ def collection_items(group: str, limit: int = 100, library: str = "") -> list[di
 
 
 @mcp.tool()
-def list_tags(kind: str = "keywords", limit: int = 100, library: str = "") -> list[dict]:
+def list_tags(kind: str = "keywords", limit: int = 100, library: str = "") -> list[dict] | dict:
     """Keywords with record counts (kind='keywords', the default), or EndNote's colour tags with counts (kind='colour').
     EndNote has no free tags; keywords are the nearest match."""
     _limit(limit)
@@ -885,7 +885,7 @@ def list_tags(kind: str = "keywords", limit: int = 100, library: str = "") -> li
 
 
 @mcp.tool()
-def recent_items(limit: int = 20, sort: str = "added", library: str = "") -> list[dict]:
+def recent_items(limit: int = 20, sort: str = "added", library: str = "") -> list[dict] | dict:
     """Newest records by date added (sort='added', default) or last updated (sort='updated'). Times are UTC."""
     _limit(limit)
     idx = _index(_pick(library))
@@ -895,7 +895,7 @@ def recent_items(limit: int = 20, sort: str = "added", library: str = "") -> lis
 
 
 @mcp.tool()
-def find_duplicates(max_items: int = 1000, library: str = "") -> list[dict]:
+def find_duplicates(max_items: int = 1000, library: str = "") -> list[dict] | dict:
     """Groups of records that share a DOI, or an identical normalised title and year. Scans the newest max_items
     (0 means all)."""
     idx = _index(_pick(library))
@@ -1145,6 +1145,69 @@ def check_docx_citations(path: str, library: str = "") -> dict:
                          "detail": f"document database id {', '.join(sorted(doc['db_ids']))}; {idx.lib.name} is {lib_id}"})
     out = dict(base, library=idx.lib.name, database_id_matches=id_matches, distinct_records=len(distinct), problems=problems)
     return dict(out, warning=idx.warning) if idx.warning else out
+
+
+def _fold(s):
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFKD", s.casefold()) if not unicodedata.combining(c)).strip()
+
+
+@mcp.tool()
+def convert_docx_citations(path: str, library: str = "", output: str = "", dry_run: bool = False) -> dict:
+    """Turns plain-text author-year citations in a Word .docx into live EndNote fields, matched to records in a library.
+    Handles '(Smith et al., 2020)', '(Smith & Lee, 2019; Wu, 2021)' and 'Smith et al. (2020)'. A citation is converted only
+    when exactly one active record matches the first author, the year and the number of authors; the rest are listed under
+    unmatched or ambiguous. The original file is never changed: the result goes to a new file (default
+    <name>_endnote_fields.docx beside the original, never overwriting). The library is not changed either. Afterwards, in Word,
+    use EndNote > Update Citations and Bibliography to format the citations and build the reference list.
+    dry_run=True only reports what would be converted."""
+    p = Path(path.strip())
+    if p.suffix.lower() != ".docx":
+        raise LibError("convert_docx_citations reads only .docx files. In Word, use File > Save As > Word Document (.docx).")
+    if not p.is_file():
+        raise LibError(f"Word file not found: {p}")
+    if p.stat().st_size > MAX_DOCX_BYTES:
+        raise LibError(f"That file is too large (limit {MAX_DOCX_BYTES // 1_000_000} MB).")
+    out_path = Path(output.strip()) if output.strip() else p.with_name(p.stem + "_endnote_fields.docx")
+    if out_path.suffix.lower() != ".docx":
+        raise LibError("The output file must end in .docx.")
+    if out_path.resolve() == p.resolve():
+        raise LibError("The output file must be a different file from the original.")
+    if out_path.exists() and not dry_run:
+        raise LibError(f"{out_path.name} already exists. Give another output name, or move that file.")
+    idx = _index(_pick(library))
+    if not idx.db_id:
+        raise LibError(f"{idx.lib.name} has no database id, so Word could not link the citations to it.")
+    by_surname = {}
+    for rid in idx.order:
+        r = idx.recs[rid]
+        if not r["trash"] and r["author"]:
+            by_surname.setdefault(_fold(r["author"][0].split(",")[0]), []).append(r)
+
+    def find(name, year):
+        parts = re.split(r" et al\.| & | and ", name)
+        first = _fold(parts[0])
+        hits = [r for r in by_surname.get(first, []) if r["year"] == year]
+        if " et al." in name:
+            hits = [r for r in hits if len(r["author"]) >= 3]
+        elif len(parts) > 1:
+            hits = [r for r in hits if len(r["author"]) == 2 and _fold(r["author"][1].split(",")[0]) == _fold(parts[1])]
+        else:
+            hits = [r for r in hits if len(r["author"]) == 1]
+        return hits
+
+    import docx_cites
+    out_tmp = out_path
+    rep = docx_cites.convert(str(p), str(out_tmp), find, idx.db_id, ts=str(int(datetime.now().timestamp())), dry_run=dry_run)
+    result = {"file": p.name, "library": idx.lib.name, "dry_run": dry_run, "citations_converted": rep["converted"],
+              "records_cited": len(rep["records"]), "per_record": {f"{idx.lib.name}:{k}": v for k, v in rep["records"].items()},
+              "unmatched": rep["unmatched"], "ambiguous": rep["ambiguous"]}
+    if rep["converted"] and not dry_run:
+        result["output"] = str(out_path)
+        result["next_step"] = "Open the new file in Word and use EndNote > Update Citations and Bibliography."
+    elif not rep["converted"]:
+        result["message"] = "No plain-text citations matched a record, so no file was written."
+    return dict(result, warning=idx.warning) if idx.warning else result
 
 
 def _authors_csl(authors):
